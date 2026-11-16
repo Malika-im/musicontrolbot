@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Storage and Audio Files
+storage_data/uploads/*
+storage_data/stems/*
+storage_data/results/*
+storage_data/temp/*
+!storage_data/uploads/.gitkeep
+!storage_data/stems/.gitkeep
+!storage_data/results/.gitkeep
+!storage_data/temp/.gitkeep
+
+# Environment variables
+.env
+*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
