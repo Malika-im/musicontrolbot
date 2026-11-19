@@ -91,13 +91,37 @@ class Settings(BaseSettings):
         """
         Normalize cloud database URLs (Railway, Render, Heroku).
         Converts postgres:// and postgresql:// to postgresql+asyncpg://
+        Auto-detects Railway's DATABASE_PUBLIC_URL or PGHOST if default is unchanged.
         """
+        # If default placeholder or empty, look for Railway alternative environment variables
+        if not v or "aimusic:aimusic_secure_password@postgres:5432" in v:
+            alt_url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PUBLIC_URL")
+            if not alt_url and os.environ.get("PGHOST"):
+                user = os.environ.get("PGUSER", "postgres")
+                pwd = os.environ.get("PGPASSWORD", "")
+                host = os.environ.get("PGHOST", "")
+                port = os.environ.get("PGPORT", "5432")
+                db = os.environ.get("PGDATABASE", "railway")
+                alt_url = f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
+            if alt_url:
+                v = alt_url
+
         if not v:
             return v
+
+        # Fix scheme for asyncpg
         if v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql+asyncpg://", 1)
-        if v.startswith("postgresql://") and not v.startswith("postgresql+"):
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        # Remove sslmode query parameter if present, as asyncpg handles SSL directly
+        if "?" in v and "sslmode=" in v:
+            import re
+            v = re.sub(r"[?&]sslmode=[^&]+", "", v)
+            if v.endswith("?"):
+                v = v[:-1]
+
         return v
 
     @field_validator("DATABASE_SYNC_URL", mode="before")
@@ -118,10 +142,19 @@ class Settings(BaseSettings):
         if "postgresql+asyncpg://" in self.DATABASE_URL and "sqlite" not in self.DATABASE_SYNC_URL:
             self.DATABASE_SYNC_URL = self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
 
-        # Auto-configure from REDIS_URL (provided by Railway)
-        if self.REDIS_URL:
-            self.CELERY_BROKER_URL = self.REDIS_URL
-            self.CELERY_RESULT_BACKEND = self.REDIS_URL
+        # Auto-configure from REDIS_URL or REDIS_PUBLIC_URL or REDISHOST (provided by Railway)
+        redis_target = self.REDIS_URL or os.environ.get("REDIS_URL") or os.environ.get("REDIS_PUBLIC_URL")
+        if not redis_target and os.environ.get("REDISHOST"):
+            r_host = os.environ.get("REDISHOST")
+            r_port = os.environ.get("REDISPORT", "6379")
+            r_pwd = os.environ.get("REDISPASSWORD", "")
+            r_user = os.environ.get("REDISUSER", "default")
+            redis_target = f"redis://{r_user}:{r_pwd}@{r_host}:{r_port}/0"
+
+        if redis_target:
+            self.REDIS_URL = redis_target
+            self.CELERY_BROKER_URL = redis_target
+            self.CELERY_RESULT_BACKEND = redis_target
 
         # Auto-configure Webhook URL if RAILWAY_PUBLIC_DOMAIN is available
         railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
