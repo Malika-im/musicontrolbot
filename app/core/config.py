@@ -183,8 +183,9 @@ class Settings(BaseSettings):
 
     @property
     def webhook_path(self) -> str:
-        token_hash = hash(self.TELEGRAM_BOT_TOKEN)
-        return f"/webhook/{abs(token_hash)}"
+        import hashlib
+        token_hash = hashlib.sha256(self.TELEGRAM_BOT_TOKEN.encode("utf-8")).hexdigest()[:16]
+        return f"/webhook/{token_hash}"
 
 
 @lru_cache
